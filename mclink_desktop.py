@@ -56,24 +56,60 @@ def run_gui():
     ttk.Radiobutton(frm_role, text="玩家（我加入）", value="guest",
                     variable=role_var).pack(side="left", padx=12)
 
-    ttk.Label(grid, text="信令服务器：").grid(row=1, column=0, sticky="w")
+    ttk.Label(grid, text="信令方式：").grid(row=1, column=0, sticky="w")
+    sig_var = tk.StringVar(value="public")
+    frm_sig = ttk.Frame(grid)
+    frm_sig.grid(row=1, column=1, sticky="w")
+    rb_public = ttk.Radiobutton(frm_sig, text="公共信令（推荐）", value="public",
+                                variable=sig_var)
+    rb_udp = ttk.Radiobutton(frm_sig, text="自建服务器", value="udp",
+                             variable=sig_var)
+    rb_manual = ttk.Radiobutton(frm_sig, text="手动IP", value="manual",
+                                variable=sig_var)
+    rb_public.pack(side="left")
+    rb_udp.pack(side="left", padx=8)
+    rb_manual.pack(side="left")
+
+    lbl_server_title = ttk.Label(grid, text="信令服务器：")
+    lbl_server_title.grid(row=2, column=0, sticky="w")
     ent_server = ttk.Entry(grid)
     ent_server.insert(0, DEFAULT_SERVER)
-    ent_server.grid(row=1, column=1, sticky="ew", pady=2)
-    ttk.Label(grid, text="房间号：").grid(row=2, column=0, sticky="w")
+    ent_server.grid(row=2, column=1, sticky="ew", pady=2)
+    lbl_peer_title = ttk.Label(grid, text="房主公网地址：")
+    ent_peer = ttk.Entry(grid)
+    ttk.Label(grid, text="房间号：").grid(row=3, column=0, sticky="w")
     ent_room = ttk.Entry(grid)
     ent_room.insert(0, "")
-    ent_room.grid(row=2, column=1, sticky="ew", pady=2)
-    ttk.Label(grid, text="密码（可空）：").grid(row=3, column=0, sticky="w")
+    ent_room.grid(row=3, column=1, sticky="ew", pady=2)
+    ttk.Label(grid, text="密码（可空）：").grid(row=4, column=0, sticky="w")
     ent_pw = ttk.Entry(grid)
-    ent_pw.grid(row=3, column=1, sticky="ew", pady=2)
-    ttk.Label(grid, text="游戏端口：").grid(row=4, column=0, sticky="w")
+    ent_pw.grid(row=4, column=1, sticky="ew", pady=2)
+    ttk.Label(grid, text="游戏端口：").grid(row=5, column=0, sticky="w")
     ent_port = ttk.Entry(grid, width=10)
     ent_port.insert(0, "25565")
-    ent_port.grid(row=4, column=1, sticky="w", pady=2)
+    ent_port.grid(row=5, column=1, sticky="w", pady=2)
     lbl_port_tip = ttk.Label(grid, text="房主：MC 局域网开放时显示的端口；玩家：保持默认即可",
                              foreground="#888")
-    lbl_port_tip.grid(row=5, column=1, sticky="w")
+    lbl_port_tip.grid(row=6, column=1, sticky="w")
+
+    def update_sig_rows(*_):
+        s = sig_var.get()
+        for w in (lbl_server_title, ent_server):
+            if s == "udp":
+                lbl_server_title.grid(row=2, column=0, sticky="w")
+                ent_server.grid(row=2, column=1, sticky="ew", pady=2)
+            else:
+                ent_server.grid_remove()
+                lbl_server_title.grid_remove()
+        if s == "manual":
+            lbl_peer_title.grid(row=2, column=0, sticky="w")
+            ent_peer.grid(row=2, column=1, sticky="ew", pady=2)
+        else:
+            ent_peer.grid_remove()
+            lbl_peer_title.grid_remove()
+    for rb in (rb_public, rb_udp, rb_manual):
+        rb.configure(command=update_sig_rows)
+    update_sig_rows()
 
     frm_btn = ttk.Frame(frm_set)
     frm_btn.pack(fill="x", padx=8, pady=(0, 8))
@@ -128,8 +164,18 @@ def run_gui():
             messagebox.showerror("MCLink", "请填写房间号（随便起一个，和朋友约好同一个即可）")
             return
         role = role_var.get()
-        app.start(role, server, room, ent_pw.get().strip(),
-                  target_port=port, listen_port=port)
+        sig = sig_var.get()
+        manual_peer = None
+        if sig == "manual":
+            if role == "guest":
+                manual_peer = ent_peer.get().strip()
+                if not manual_peer:
+                    messagebox.showerror("MCLink", "手动IP模式：玩家需要填房主公网地址")
+                    return
+        app.start(role, server if sig == "udp" else None, room,
+                  ent_pw.get().strip(),
+                  target_port=port, listen_port=port,
+                  sig=sig, manual_peer=manual_peer)
         btn_start.configure(state="disabled")
         btn_stop.configure(state="normal")
         if role == "guest":
@@ -143,13 +189,14 @@ def run_gui():
     btn_start.configure(command=do_start)
 
     def do_refresh():
-        info = core.network_info()
+        info = core.network_info(include_public=True)
         lbl_info.configure(text=(
             f"局域网 IP：{info['lan_ip']}\n"
+            f"公网 IPv4：{info['public_ip']}\n"
             f"Java 监听端口：{info['java_ports_text']}\n"
             f"IPv6：{info['ipv6']}\n"
             f"说明：同一 Wi-Fi 下，朋友在 MC「直接连接」填 局域网IP:端口；\n"
-            f"          都有 IPv6 时填 [IPv6地址]:端口；否则用上面的 P2P 联机"))
+            f"          否则用上面的 P2P 联机（IPv4 打洞，失败自动中继）"))
         push_log("已刷新本机信息")
 
     btn_refresh.configure(command=do_refresh)
